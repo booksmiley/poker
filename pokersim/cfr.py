@@ -98,12 +98,19 @@ class Trainer:
         return self._traverse(hand, traverser, weight)
 
     # ---- training loop -----------------------------------------------
-    DISCOUNT_EVERY = 1000
+    DISCOUNT_EVERY = 1000  # minimum gap; grows to t/40 as training matures
 
-    def _discount(self, t):
+    def _discount_gap(self, t):
+        # A discount pass costs O(table). The linear-CFR weighting it
+        # approximates is spacing-independent (the decay telescopes to
+        # ~tau/T for any schedule), so passes are spread further apart as
+        # t grows to keep the pass from dominating the iteration time.
+        return max(self.DISCOUNT_EVERY, t // 40)
+
+    def _discount(self, t, gap):
         """Linear-CFR style discount: early (noisy) regrets and strategy
         weight decay relative to later iterations."""
-        factor = t / (t + self.DISCOUNT_EVERY)
+        factor = t / (t + gap)
         for regrets, sums in self.table.values():
             for i in range(len(regrets)):
                 regrets[i] *= factor
@@ -112,6 +119,7 @@ class Trainer:
     def run(self, iters, log_every=200, save_path=None, save_every=2000):
         start = time.time()
         first = self.iters_done + 1
+        next_discount = self.iters_done + self._discount_gap(max(self.iters_done, 1))
         # training allocates millions of acyclic objects; the cyclic
         # collector only adds full-heap scan pauses
         gc_was_enabled = gc.isenabled()
@@ -122,8 +130,9 @@ class Trainer:
                     hand = Hand(self.n, self.stack, self.sb, self.bb, rng=self.rng)
                     self._traverse(hand, traverser, float(t))
                 self.iters_done = t
-                if t % self.DISCOUNT_EVERY == 0:
-                    self._discount(t)
+                if t >= next_discount:
+                    self._discount(t, self._discount_gap(t))
+                    next_discount = t + self._discount_gap(t)
                 done = t - first + 1
                 if log_every and done % log_every == 0:
                     rate = done / (time.time() - start)

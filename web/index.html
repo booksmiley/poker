@@ -1,0 +1,262 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Poker vs GTO</title>
+<style>
+  * { box-sizing: border-box; margin: 0; -webkit-tap-highlight-color: transparent; }
+  body { font-family: -apple-system, "Segoe UI", Roboto, sans-serif;
+         background: #0d2318; color: #e8e4d8; min-height: 100vh; }
+  #app { max-width: 480px; margin: 0 auto; padding: 10px 12px 120px; }
+  h1 { font-size: 20px; margin: 18px 0 10px; }
+  .bar { display: flex; justify-content: space-between; align-items: baseline;
+         padding: 6px 2px; font-size: 14px; color: #b8c4ae; }
+  .bar b { color: #fff; font-size: 16px; }
+  .opps { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .opps.three { grid-template-columns: 1fr 1fr 1fr; }
+  .seat { background: #16382a; border: 2px solid #24513c; border-radius: 10px;
+          padding: 7px 9px; font-size: 13px; min-height: 74px; }
+  .seat.turn { border-color: #f2c14e; box-shadow: 0 0 8px #f2c14e55; }
+  .seat.folded { opacity: .45; }
+  .seat .nm { font-weight: 600; font-size: 14px; }
+  .seat .st { color: #9fb59a; margin-top: 2px; }
+  .cards { margin-top: 5px; display: flex; gap: 4px; }
+  .card { background: #fdfdf6; color: #1a1a1a; border-radius: 5px;
+          padding: 2px 0; width: 30px; text-align: center;
+          font-weight: 700; font-size: 15px; border: 1px solid #ccc; }
+  .card.red { color: #c22e2e; }
+  .card.back { background: repeating-linear-gradient(45deg,#3757a5,#3757a5 4px,#2c478c 4px,#2c478c 8px);
+               border-color: #24407e; color: transparent; }
+  .card.blank { background: #143427; border: 1px dashed #2c5a44; color: transparent; }
+  .board { display: flex; gap: 6px; justify-content: center; margin: 14px 0;
+           padding: 12px 8px; background: #12442e; border-radius: 12px;
+           border: 2px solid #1d5c3f; }
+  .board .card { width: 40px; font-size: 19px; padding: 7px 0; }
+  .log { font-size: 12px; color: #9fb59a; line-height: 1.5; margin: 8px 2px;
+         max-height: 68px; overflow-y: auto; }
+  .me { background: #16382a; border: 2px solid #24513c; border-radius: 12px;
+        padding: 10px 12px; margin-top: 8px; }
+  .me.turn { border-color: #f2c14e; }
+  .me .cards .card { width: 46px; font-size: 22px; padding: 9px 0; }
+  .me .info { font-size: 13px; color: #b8c4ae; margin-top: 6px; }
+  .actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+  button { border: 0; border-radius: 9px; padding: 12px 16px; font-size: 15px;
+           font-weight: 600; color: #fff; background: #2c6e4e; }
+  button:active { transform: scale(.97); }
+  button.fold { background: #8c3a34; }
+  button.call { background: #2e6da4; }
+  button.allin { background: #7a2f52; }
+  button.ghost { background: #24513c; color: #cfe0c8; }
+  .raiserow { display: flex; gap: 8px; margin-top: 8px; }
+  .raiserow input { flex: 1; min-width: 60px; border-radius: 9px; border: 0;
+                    padding: 10px; font-size: 16px; background:#0f2a1e; color:#fff;
+                    border: 1px solid #2c5a44; }
+  .advice { background: #0f2a1e; border: 1px solid #2c5a44; border-radius: 10px;
+            padding: 10px 12px; margin-top: 10px; font-size: 14px; }
+  .advice .row { display: flex; align-items: center; gap: 8px; margin: 4px 0; }
+  .advice .lbl { width: 130px; }
+  .advice .bg { flex: 1; background: #16382a; border-radius: 4px; height: 12px; }
+  .advice .fill { background: #f2c14e; height: 12px; border-radius: 4px; }
+  .panel { background: #16382a; border-radius: 12px; padding: 12px 14px; margin-top: 10px; }
+  .panel h3 { font-size: 15px; margin-bottom: 8px; color: #f2c14e; }
+  .row2 { display: flex; justify-content: space-between; padding: 3px 0; font-size: 14px; }
+  .deadline { color: #f2c14e; font-size: 13px; margin-left: auto; align-self: center; }
+  input.name { width: 100%; border-radius: 9px; border: 1px solid #2c5a44; padding: 12px;
+               font-size: 16px; background: #0f2a1e; color: #fff; margin: 10px 0; }
+  .toast { position: fixed; bottom: 14px; left: 50%; transform: translateX(-50%);
+           background: #8c3a34; padding: 10px 16px; border-radius: 9px; font-size: 14px;
+           opacity: 0; transition: opacity .3s; pointer-events: none; }
+  .toast.show { opacity: 1; }
+  .net { font-size: 16px; font-weight: 700; }
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div id="toast" class="toast"></div>
+<script>
+const SUIT = {s:'♠', h:'♥', d:'♦', c:'♣'};
+let token = localStorage.getItem('pk_token');
+let advice = null, adviceForSeq = -1;
+
+const $app = document.getElementById('app');
+
+async function api(path, body) {
+  const opts = body
+    ? {method:'POST', headers:{'Content-Type':'application/json'},
+       body: JSON.stringify(Object.assign({token}, body))}
+    : undefined;
+  const url = body ? path : path + '?token=' + encodeURIComponent(token || '');
+  const r = await fetch(url, opts);
+  return r.json();
+}
+
+function toast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2200);
+}
+
+function cardHTML(code, cls) {
+  if (code === null) return `<div class="card back ${cls||''}">?</div>`;
+  if (code === undefined) return `<div class="card blank ${cls||''}">?</div>`;
+  const r = code[0] === 'T' ? '10' : code[0], s = code[1];
+  const red = (s === 'h' || s === 'd') ? 'red' : '';
+  return `<div class="card ${red} ${cls||''}">${r}${SUIT[s]}</div>`;
+}
+
+function seatHTML(seat) {
+  const cls = ['seat', seat.to_act ? 'turn' : '', seat.folded ? 'folded' : ''].join(' ');
+  let st = '';
+  if (seat.folded) st = 'folded (' + seat.fold_street + ')';
+  else if (seat.allin) st = 'ALL-IN ' + seat.committed;
+  else st = seat.chips + (seat.bet ? ' · bet ' + seat.bet : '');
+  const cards = seat.folded ? '' :
+    `<div class="cards">${(seat.cards || [null, null]).map(c => cardHTML(c)).join('')}</div>`;
+  return `<div class="${cls}"><span class="nm">${seat.name}</span>
+    <span style="color:#7c9b77"> ${seat.position}</span>
+    <div class="st">${st}</div>${cards}</div>`;
+}
+
+function render(s) {
+  // preserve any in-progress typing across the 1s re-render
+  const keep = {};
+  for (const id of ['amt', 'nm']) {
+    const el = document.getElementById(id);
+    if (el) keep[id] = {val: el.value, focus: document.activeElement === el};
+  }
+  if (s.error && !s.you) { $app.innerHTML = `<h1>Poker vs GTO</h1><p>${s.error}</p>`; return; }
+  else if (!s.you.seated && !s.you.pending) renderJoin(s);
+  else if (s.phase === 'lobby') renderLobby(s);
+  else renderTable(s);
+  for (const id in keep) {
+    const el = document.getElementById(id);
+    if (el && keep[id].val) el.value = keep[id].val;
+    if (el && keep[id].focus) el.focus();
+  }
+}
+
+function renderJoin(s) {
+  $app.innerHTML = `<h1>Poker vs GTO</h1>
+    <div class="panel"><h3>Join the table</h3>
+      <input class="name" id="nm" placeholder="Your name" maxlength="12">
+      <button onclick="doJoin()">Sit down</button></div>
+    <div class="panel"><h3>At the table</h3>
+      ${s.players.map(p => `<div class="row2"><span>${p.name}${p.is_bot ? ' 🤖' : ''}</span><span>${p.chips}</span></div>`).join('')}
+    </div>`;
+}
+
+function renderLobby(s) {
+  $app.innerHTML = `<h1>Poker vs GTO</h1>
+    <div class="panel"><h3>Waiting to start</h3>
+      ${s.players.map(p => `<div class="row2"><span>${p.name}${p.is_bot ? ' 🤖' : ''}${p.you ? ' (you)' : ''}</span><span>${p.chips}</span></div>`).join('')}
+    </div>
+    ${s.you.seated ? '<div class="actions"><button onclick="nextHand()">Deal the first hand</button></div>'
+                   : '<p style="margin-top:10px">You are seated next hand…</p>'}
+    <div class="log">${s.log.slice(-4).join('<br>')}</div>`;
+}
+
+function renderTable(s) {
+  const me = s.seats.find(x => x.you);
+  const opps = s.seats.filter(x => !x.you);
+  const board = [0,1,2,3,4].map(i => cardHTML(s.board[i] !== undefined ? s.board[i] : undefined));
+  let html = `<div class="bar"><span>Hand #${s.hand_no} · <b>${s.street}</b></span>
+      <span>Pot <b>${s.pot}</b></span></div>
+    <div class="opps ${opps.length >= 3 ? 'three' : ''}">${opps.map(seatHTML).join('')}</div>
+    <div class="board">${board.join('')}</div>
+    <div class="log">${s.log.slice(-5).join('<br>')}</div>`;
+
+  if (me) {
+    const y = s.you;
+    html += `<div class="me ${me.to_act ? 'turn' : ''}">
+      <div style="display:flex;justify-content:space-between">
+        <span class="nm">${me.name} · ${me.position}</span>
+        <span>${me.folded ? 'folded (' + me.fold_street + ')' : (me.allin ? 'ALL-IN' : me.chips + (me.bet ? ' · bet ' + me.bet : ''))}</span>
+      </div>
+      <div class="cards" style="margin-top:8px">${(y.cards || []).map(c => cardHTML(c)).join('')}</div>
+      ${y.hand_so_far ? `<div class="info">You have: ${y.hand_so_far}</div>` : ''}`;
+    if (y.is_turn) {
+      html += `<div class="info">To call: ${y.to_call}${y.pot_odds ? ' (pot odds ' + y.pot_odds + '%)' : ''}
+          ${y.deadline != null ? `<span class="deadline">⏱ ${y.deadline}s</span>` : ''}</div>
+        <div class="actions">
+          ${y.actions.map(a => `<button class="${btnCls(a.id)}" onclick="doAct('${a.id}')">${a.label}</button>`).join('')}
+          <button class="ghost" onclick="getAdvice()">GTO ?</button>
+        </div>`;
+      if (y.raise_min !== undefined) {
+        html += `<div class="raiserow">
+          <input id="amt" type="number" min="${y.raise_min}" max="${y.raise_max}"
+                 placeholder="${y.raise_min}–${y.raise_max}" inputmode="numeric">
+          <button onclick="doRaise()">Raise to</button></div>`;
+      }
+      if (advice && adviceForSeq === s.seq) html += adviceHTML(advice);
+    }
+    html += `</div>`;
+  }
+
+  if (s.phase === 'showdown' && s.result) {
+    const r = s.result;
+    html += `<div class="panel"><h3>Hand over</h3>
+      ${r.reveal.map(x => `<div class="row2"><span>${x.name}</span>
+        <span style="display:flex;gap:4px">${x.cards.map(c => cardHTML(c)).join('')}</span>
+        <span>${x.status}</span></div>`).join('')}
+      ${r.uncalled ? `<div class="row2"><span>${r.uncalled.name} takes back ${r.uncalled.amount} (uncalled)</span></div>` : ''}
+      ${r.winners.map(w => `<div class="row2"><b>${w.name} wins ${w.amount}</b></div>`).join('')}
+      ${s.you.net != null ? `<div class="net" style="margin-top:6px">Your result: ${s.you.net >= 0 ? '+' : ''}${s.you.net}</div>` : ''}
+      <div class="actions"><button onclick="nextHand()">Next hand</button></div></div>`;
+  }
+  $app.innerHTML = html;
+}
+
+function btnCls(id) {
+  return {f:'fold', c:'call', a:'allin'}[id] || '';
+}
+
+function adviceHTML(a) {
+  if (a.error) return `<div class="advice">${a.error}</div>`;
+  return `<div class="advice"><b>GTO mix for ${a.cards}</b>
+    ${a.equity !== undefined ? ` · ~${a.equity}% equity` : ''}
+    ${a.mix.map(m => `<div class="row"><span class="lbl">${m.label}</span>
+      <div class="bg"><div class="fill" style="width:${m.pct}%"></div></div>
+      <span>${m.pct}%</span></div>`).join('')}
+    ${a.trained ? '' : '<div style="color:#c99">untrained spot — fallback guess</div>'}</div>`;
+}
+
+async function doJoin() {
+  const name = document.getElementById('nm').value;
+  const r = await api('/join', {name});
+  if (r.error) return toast(r.error);
+  token = r.token; localStorage.setItem('pk_token', token);
+  poll();
+}
+async function doAct(id) { advice = null; const r = await api('/act', {action: id}); if (r.error) toast(r.error); poll(); }
+async function doRaise() {
+  const v = parseInt(document.getElementById('amt').value, 10);
+  if (!v) return toast('enter an amount');
+  advice = null;
+  const r = await api('/act', {raise_to: v}); if (r.error) toast(r.error); poll();
+}
+async function nextHand() { const r = await api('/next', {}); if (r.error) toast(r.error); poll(); }
+async function getAdvice() {
+  advice = await api('/advice'); adviceForSeq = lastSeq; renderLast();
+}
+
+let lastState = null, lastSeq = -1;
+function renderLast() { if (lastState) { lastState.seq = lastSeq; render(lastState); } }
+async function poll() {
+  try {
+    const s = await api('/state');
+    if (s.seq !== lastSeq || !lastState) {
+      if (advice && s.seq !== adviceForSeq) advice = null;
+      lastState = s; lastSeq = s.seq;
+      render(s);
+    } else {
+      lastState = s;  // keep countdown fresh even without seq change
+      render(s);
+    }
+  } catch (e) { /* server briefly unreachable; retry on next tick */ }
+}
+setInterval(poll, 1000);
+poll();
+</script>
+</body>
+</html>

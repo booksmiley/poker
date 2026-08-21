@@ -75,6 +75,32 @@ Your turn. Pot: 10. To call: 5, pot odds 33%. Stack: 198.
 - Bets are integer chips; the menu offers the trained sizes (½-pot, pot,
   all-in) but `b <amount>` lets you raise to any legal amount
 
+## Play with friends (phones + bots)
+
+```bash
+python3 serve.py --players 4
+```
+
+Your Mac hosts the table; it prints an address like `http://192.168.1.7:8080`.
+Anyone on the **same Wi-Fi** opens it in their phone browser — no app, no
+internet needed. Join with a name, tap Deal, and every seat without a
+human is played by the GTO bots. Each phone sees only its own cards, has
+its own `GTO ?` advice button, and absent players are auto-checked/folded
+after `--turn-timeout` seconds (default 45) so the table never stalls.
+
+Offline / on a plane (Wi-Fi is allowed in airplane mode):
+
+1. Easiest: a pocket travel router — everyone joins its network.
+2. Mac-only: System Settings → General → Sharing → Internet Sharing, share
+   from an unused interface (e.g. Thunderbolt Bridge) *to* Wi-Fi and set a
+   network name/password. That creates a local hotspot with no internet,
+   which is all the game needs. Then run `serve.py` and use the printed IP.
+3. First time, macOS asks whether Python may accept incoming connections —
+   allow it.
+
+The server prefers the small distilled `bp_4p.gto` (ships with the repo),
+so a fresh clone can host a table immediately.
+
 ## Glossary (all the abbreviations the interface uses)
 
 ### Money and chips
@@ -223,8 +249,10 @@ pokersim/
   ai.py           bot agent sampling from the blueprint
   cli.py          interactive shell game (text mode + shared input handling)
   tui.py          round-table view (default UI)
+  webtable.py     server-side table for browser multiplayer
 train.py          train/resume blueprints
-play.py           play a session
+play.py           play a solo session in the terminal
+serve.py          host a browser table for phones (web/index.html is the page)
 inspect_strategy.py   look inside a blueprint
 tests/run_tests.py    self-contained test suite
 ```

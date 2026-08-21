@@ -238,6 +238,121 @@ def test_mini_cfr_and_blueprint():
     print(f"ok  mini CFR run ({len(tr.table)} infosets) + blueprint round-trip")
 
 
+class _FakeBP:
+    n_players = 4
+    stack = 200
+    sb, bb = 1, 2
+    iters_done = 0
+    table = {}
+
+    def probs(self, key, n):
+        return None
+
+
+def _drive_to_showdown(table, tokens, max_steps=600):
+    """Poll like browsers would; humans always call/check."""
+    for _ in range(max_steps):
+        for tok in tokens:
+            s = table.state_for(tok)
+            if s["phase"] == "showdown":
+                return s
+            you = s.get("you", {})
+            if you.get("is_turn"):
+                r = table.act(tok, {"action": "c"})
+                assert "error" not in r, r
+    raise AssertionError("hand never finished")
+
+
+def test_webtable_two_humans():
+    from pokersim.webtable import WebTable
+
+    t = WebTable(_FakeBP(), seats=4, seed=7, turn_timeout=999, bot_delay=0)
+    r1, r2 = t.join("Ann"), t.join("Bob")
+    tok1, tok2 = r1["token"], r2["token"]
+    assert not r1["pending"] and not r2["pending"]
+    assert t.start_hand(tok1)["ok"]
+
+    # privacy: mid-hand you see your own cards, never an opponent's
+    s = t.state_for(tok1)
+    mine = [x for x in s["seats"] if x["you"]][0]
+    assert mine["cards"] is not None
+    assert all(x["cards"] is None for x in s["seats"]
+               if not x["you"] and not x["folded"])
+
+    s = _drive_to_showdown(t, [tok1, tok2])
+    assert all(x["cards"] is not None for x in s["seats"])  # full reveal
+    assert sum(p["chips"] for p in t.players) == 4 * 200    # zero-sum
+    assert t.start_hand(tok2)["ok"] and t.hand_no == 2      # rotation works
+    _drive_to_showdown(t, [tok1, tok2])
+    assert sum(p["chips"] for p in t.players) == 4 * 200
+    # unknown token can't act or deal
+    assert "error" in t.act("nope", {"action": "c"})
+    assert "error" in t.start_hand("nope")
+    print("ok  webtable: two humans, privacy, zero-sum, rotation")
+
+
+def test_webtable_timeout_autoplay():
+    from pokersim.webtable import WebTable
+
+    t = WebTable(_FakeBP(), seats=3, seed=11, turn_timeout=0, bot_delay=0)
+    tok = t.join("Zoe")["token"]
+    t.start_hand(tok)
+    for _ in range(300):
+        if t.state_for(tok)["phase"] == "showdown":
+            break
+    else:
+        raise AssertionError("timeout autoplay never finished the hand")
+    assert sum(p["chips"] for p in t.players) == 3 * 200
+    print("ok  webtable: absent human auto-checks/folds on timeout")
+
+
+def test_http_server():
+    import json
+    import threading
+    import urllib.request
+    from http.server import ThreadingHTTPServer
+    from pokersim.webtable import WebTable
+    import serve
+
+    table = WebTable(_FakeBP(), seats=4, seed=3, turn_timeout=999, bot_delay=0)
+    httpd = ThreadingHTTPServer(("127.0.0.1", 0), serve.make_handler(table))
+    port = httpd.server_address[1]
+    threading.Thread(target=httpd.serve_forever, daemon=True).start()
+    base = f"http://127.0.0.1:{port}"
+
+    def get(path):
+        with urllib.request.urlopen(base + path) as r:
+            return r.status, r.read()
+
+    def post(path, obj):
+        req = urllib.request.Request(
+            base + path, json.dumps(obj).encode(),
+            {"Content-Type": "application/json"})
+        with urllib.request.urlopen(req) as r:
+            return json.loads(r.read())
+
+    status, page = get("/")
+    assert status == 200 and b"Poker vs GTO" in page
+    tok = post("/join", {"name": "Cara"})["token"]
+    assert post("/next", {"token": tok})["ok"]
+    for _ in range(500):
+        s = json.loads(get(f"/state?token={tok}")[1])
+        if s["phase"] == "showdown":
+            break
+        if s["you"].get("is_turn"):
+            if "raise_min" in s["you"]:  # exercise the custom-raise path once
+                r = post("/act", {"token": tok,
+                                  "raise_to": s["you"]["raise_min"]})
+            else:
+                r = post("/act", {"token": tok, "action": "c"})
+            assert "error" not in r, r
+    else:
+        raise AssertionError("HTTP hand never finished")
+    assert "error" in post("/act", {"token": "bogus", "action": "c"})
+    httpd.shutdown()
+    print("ok  http server: join/state/act/next end-to-end")
+
+
 if __name__ == "__main__":
     test_evaluator_known_hands()
     test_evaluator_consistency()
@@ -250,4 +365,7 @@ if __name__ == "__main__":
     test_equity_sanity()
     test_distilled_blueprint_roundtrip()
     test_mini_cfr_and_blueprint()
+    test_webtable_two_humans()
+    test_webtable_timeout_autoplay()
+    test_http_server()
     print("\nall tests passed")
