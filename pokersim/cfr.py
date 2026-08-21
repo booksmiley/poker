@@ -12,6 +12,7 @@ approximate equilibrium in practice (the same approach as Pluribus's
 blueprint), which is the accepted practical meaning of "GTO bot" at a
 multiway table.
 """
+import gc
 import random
 import time
 
@@ -106,22 +107,30 @@ class Trainer:
     def run(self, iters, log_every=200, save_path=None, save_every=2000):
         start = time.time()
         first = self.iters_done + 1
-        for t in range(first, first + iters):
-            for traverser in range(self.n):
-                hand = Hand(self.n, self.stack, self.sb, self.bb, rng=self.rng)
-                self._traverse(hand, traverser, float(t))
-            self.iters_done = t
-            if t % self.DISCOUNT_EVERY == 0:
-                self._discount(t)
-            done = t - first + 1
-            if log_every and done % log_every == 0:
-                rate = done / (time.time() - start)
-                print(
-                    f"  iter {t:>7}  |  {len(self.table):>8,} infosets"
-                    f"  |  {rate:5.1f} it/s"
-                )
-            if save_path and save_every and done % save_every == 0:
-                self.save(save_path)
+        # training allocates millions of acyclic objects; the cyclic
+        # collector only adds full-heap scan pauses
+        gc_was_enabled = gc.isenabled()
+        gc.disable()
+        try:
+            for t in range(first, first + iters):
+                for traverser in range(self.n):
+                    hand = Hand(self.n, self.stack, self.sb, self.bb, rng=self.rng)
+                    self._traverse(hand, traverser, float(t))
+                self.iters_done = t
+                if t % self.DISCOUNT_EVERY == 0:
+                    self._discount(t)
+                done = t - first + 1
+                if log_every and done % log_every == 0:
+                    rate = done / (time.time() - start)
+                    print(
+                        f"  iter {t:>7}  |  {len(self.table):>8,} infosets"
+                        f"  |  {rate:5.1f} it/s"
+                    )
+                if save_path and save_every and done % save_every == 0:
+                    self.save(save_path)
+        finally:
+            if gc_was_enabled:
+                gc.enable()
         if save_path:
             self.save(save_path)
 

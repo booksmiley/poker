@@ -17,7 +17,7 @@ N_BUCKETS = 10
 TRIALS = {3: 28, 4: 28, 5: 44}
 
 _cache = {}
-_CACHE_MAX = 200_000
+_CACHE_MAX = 500_000
 
 
 def hand_equity(hole, board, rng=None, trials=None):
@@ -53,6 +53,9 @@ def bucket(hole, board, rng=None):
     if b is None:
         eq = hand_equity(hole, board, rng)
         b = str(min(N_BUCKETS - 1, int(eq * N_BUCKETS)))
-        if len(_cache) < _CACHE_MAX:
-            _cache[key] = b
+        if len(_cache) >= _CACHE_MAX:
+            # flush rather than stop storing: repeats inside the current
+            # traversal are the hits that matter, so keep accepting entries
+            _cache.clear()
+        _cache[key] = b
     return b

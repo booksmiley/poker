@@ -68,7 +68,6 @@ def draw(hand, names, human_pos, board_limit=None):
     cv.put_center(TX + 1, TW - 2, TY + 3, slots)
     cv.put_center(TX + 1, TW - 2, TY + 4, f"Pot: {hand.pot()}")
 
-    reveal = getattr(hand, "showdown_scores", None) if hand.terminal else None
     for s in range(hand.n):
         x, y = seat_xy((s - human_pos) % hand.n, hand.n)
         x0, y0 = x - SEAT_W // 2, y - SEAT_H // 2
@@ -85,7 +84,7 @@ def draw(hand, names, human_pos, board_limit=None):
             money = f"{hand.stacks[s]} bet {bet}" if bet else f"{hand.stacks[s]}"
         cv.put(x0 + 1, y0 + 2, f" {money}"[: SEAT_W - 2])
 
-        if s == human_pos or (reveal and s in reveal):
+        if s == human_pos or hand.terminal:  # everyone shows when it's over
             cards = cards_str(hand.hole[s])
         elif hand.folded[s]:
             cards = ""
@@ -144,14 +143,18 @@ def play_hand_tui(hand_no, n, blueprint, rng, human_pos, stacks, names):
         redraw()
 
     extra = []
-    scores = getattr(hand, "showdown_scores", None)
-    if scores:
-        extra.append("  Showdown:")
-        for p in sorted(scores):
-            extra.append(
-                f"    {names[p]}: {cards_str(hand.hole[p])}"
-                f"  ({category_name(scores[p])})"
-            )
+    scores = getattr(hand, "showdown_scores", None) or {}
+    extra.append("  Cards:")
+    for p in range(n):
+        if p in scores:
+            status = category_name(scores[p])
+        elif hand.folded[p]:
+            status = "folded"
+        else:
+            status = "won uncontested"
+        extra.append(
+            f"    {names[p]}: {cards_str(hand.hole[p])}  ({status})"
+        )
     if hand.uncalled:
         p, amount = hand.uncalled
         extra.append(f"  {names[p]} takes back {amount} (uncalled bet)")

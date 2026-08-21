@@ -130,16 +130,19 @@ def human_turn(hand, hp, blueprint, rng):
         print("  ? = advice, or one of: " + ", ".join(tokens))
 
 
-def reveal_showdown(hand, names):
-    scores = getattr(hand, "showdown_scores", None)
-    if not scores:
-        return
-    print("  Showdown:")
-    for p in sorted(scores):
-        print(
-            f"    {names[p]:>4}: {cards_str(hand.hole[p])}"
-            f"  ({category_name(scores[p])})"
-        )
+def reveal_cards(hand, names):
+    """Show every player's cards at hand end — the bots play a fixed GTO
+    blueprint, so revealing costs them nothing and helps you learn."""
+    scores = getattr(hand, "showdown_scores", None) or {}
+    print("  Cards:")
+    for p in range(hand.n):
+        if p in scores:
+            status = category_name(scores[p])
+        elif hand.folded[p]:
+            status = "folded"
+        else:
+            status = "won uncontested"
+        print(f"    {names[p]:>10}: {cards_str(hand.hole[p])}  ({status})")
 
 
 def play_hand(hand_no, n, blueprint, rng, human_pos, stacks, names):
@@ -184,7 +187,7 @@ def play_hand(hand_no, n, blueprint, rng, human_pos, stacks, names):
         print()
     elif len(hand.board) > 0:
         print(f"  Final board: {cards_str(hand.board)}")
-    reveal_showdown(hand, names)
+    reveal_cards(hand, names)
     if hand.uncalled:
         p, amount = hand.uncalled
         print(f"  {names[p]} takes back {amount} (uncalled bet)")
