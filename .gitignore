@@ -1,0 +1,15 @@
+# trained blueprints are large (100MB+) and regenerable — keep them local
+blueprints/
+*.pkl
+
+# training logs and runtime artifacts
+train.log
+nohup.out
+
+# python
+__pycache__/
+*.pyc
+
+# editors / os
+.idea/
+.DS_Store
