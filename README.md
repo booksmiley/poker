@@ -7,14 +7,19 @@ Pure Python, no dependencies.
 ## Quick start
 
 ```bash
-# 1. Train a blueprint (4 players, ~3-4 minutes; more iterations = stronger)
-python3 train.py --players 4 --iters 20000
-
-# 2. Play against it
 python3 play.py --players 4
 ```
 
-If you skip step 1, `play.py` quick-trains a weak starter blueprint
+The repo ships a distilled 4-player blueprint (`blueprints/bp_4p.gto`),
+so this works straight after cloning. For other table sizes (or stronger
+bots), train your own:
+
+```bash
+python3 train.py --players 5 --iters 50000    # full .pkl, resumable
+python3 distill.py --players 5                # small .gto for git
+```
+
+If no blueprint exists, `play.py` quick-trains a weak starter one
 automatically. At any decision, type `?` to see the blueprint's action mix
 for your exact spot before you act.
 
@@ -137,7 +142,19 @@ python3 inspect_strategy.py --key "AKs|p"         # strategy facing a pot-size o
 
 Training checkpoints every `--save-every` iterations, so Ctrl-C is safe and
 `--resume` continues where it left off. Blueprints live in `blueprints/`
-as `bp_{n}p.pkl` and are specific to a player count.
+and are specific to a player count, in two formats:
+
+- `bp_{n}p.pkl` — full trainer state (regrets + strategy). Hundreds of MB;
+  supports `--resume`; git-ignored.
+- `bp_{n}p.gto` — distilled play blueprint from `distill.py`: regrets
+  dropped, near-unvisited infosets pruned (99.9% of strategy weight kept),
+  probabilities quantized to 1 byte, gzipped. ~10x smaller (well under
+  GitHub's 100MB limit), loads ~9x faster, plays identically (worst
+  quantization error <1%). Cannot resume training. If it ever outgrows
+  the size cap it is auto-split into `.partNN` files that the game
+  recombines transparently.
+
+`play.py` prefers the full `.pkl` when present, else the `.gto`.
 
 ## How the "GTO" works (and its limits)
 

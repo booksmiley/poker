@@ -40,6 +40,11 @@ class Trainer:
     @classmethod
     def from_saved(cls, path, seed=None):
         data = load_blueprint_data(path)
+        if data.get("format"):
+            raise SystemExit(
+                f"{path} is a distilled play blueprint (no regrets); "
+                "training can only resume from the full .pkl"
+            )
         tr = cls(data["n_players"], data["stack"], data["sb"], data["bb"], seed)
         tr.table = data["table"]
         tr.iters_done = data["iters_done"]

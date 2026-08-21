@@ -1,5 +1,5 @@
-# trained blueprints are large (100MB+) and regenerable — keep them local
-blueprints/
+# full trainer checkpoints are large (100MB+); only distilled .gto play
+# blueprints (see distill.py) belong in git
 *.pkl
 
 # training logs and runtime artifacts

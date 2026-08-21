@@ -10,11 +10,17 @@ import os
 
 from pokersim.cfr import Trainer
 from pokersim.cli import run_session
-from pokersim.strategy import Blueprint
+from pokersim.strategy import Blueprint, blueprint_exists
 
 
 def default_path(n):
-    return os.path.join("blueprints", f"bp_{n}p.pkl")
+    """Prefer the full local blueprint; fall back to a distilled .gto
+    (possibly split into .partNN files, e.g. fresh from git clone)."""
+    full = os.path.join("blueprints", f"bp_{n}p.pkl")
+    dist = os.path.join("blueprints", f"bp_{n}p.gto")
+    if not blueprint_exists(full) and blueprint_exists(dist):
+        return dist
+    return full
 
 
 def main():
@@ -34,7 +40,7 @@ def main():
     args = ap.parse_args()
 
     path = args.blueprint or default_path(args.players)
-    if not os.path.exists(path):
+    if not blueprint_exists(path):
         print(f"No blueprint at {path} — quick-training "
               f"{args.auto_train_iters:,} iterations first.")
         print("(For stronger bots, run e.g. "

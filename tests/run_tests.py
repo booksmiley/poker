@@ -169,6 +169,36 @@ def test_equity_sanity():
     print(f"ok  equity sanity (AA on low flop {strong:.2f}, 72o on AK9 {weak:.2f})")
 
 
+def test_distilled_blueprint_roundtrip():
+    from pokersim.strategy import Blueprint, load_blueprint_data, save_distilled
+
+    tr = Trainer(3, seed=19)
+    tr.run(15, log_every=0)
+    tmp = tempfile.mkdtemp()
+    full_path = os.path.join(tmp, "bp.pkl")
+    tr.save(full_path)
+    data = load_blueprint_data(full_path)
+    full = Blueprint(data)
+
+    # tiny part size forces the split-and-recombine path
+    dist_path = os.path.join(tmp, "bp.gto")
+    kept, files = save_distilled(dist_path, data, mass=1.0, max_part_bytes=4096)
+    assert len(files) > 1 and all(".part" in f for f in files)
+    dist = Blueprint.load(dist_path)
+    assert dist.n_players == 3 and len(dist.table) == kept
+    checked = 0
+    for k, node in full.table.items():
+        n = len(node[1])
+        pf, pd = full.probs(k, n), dist.probs(k, n)
+        if pf is None or pd is None:
+            continue
+        assert max(abs(a - b) for a, b in zip(pf, pd)) < 0.01
+        checked += 1
+    assert checked > 50
+    print(f"ok  distilled blueprint round-trip ({len(files)} parts, "
+          f"{checked} keys within 1%)")
+
+
 def test_mini_cfr_and_blueprint():
     tr = Trainer(3, seed=11)
     tr.run(15, log_every=0)
@@ -200,5 +230,6 @@ if __name__ == "__main__":
     test_engine_side_pots()
     test_engine_random_zero_sum()
     test_equity_sanity()
+    test_distilled_blueprint_roundtrip()
     test_mini_cfr_and_blueprint()
     print("\nall tests passed")
