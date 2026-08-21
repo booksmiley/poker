@@ -160,6 +160,23 @@ def test_engine_random_zero_sum():
     print("ok  engine zero-sum over 2000 random hands")
 
 
+def test_fast_evaluator_agreement():
+    from pokersim import equity
+    if not equity.FAST_EVAL:
+        print("skip fast-evaluator agreement (phevaluator not installed)")
+        return
+    from pokersim.evaluator import evaluate
+    rng = random.Random(5)
+    for _ in range(4000):
+        a = rng.sample(range(52), 7)
+        b = rng.sample(range(52), 7)
+        ours = (evaluate(a) > evaluate(b)) - (evaluate(a) < evaluate(b))
+        fast = (equity._strength(a) > equity._strength(b)) - (
+            equity._strength(a) < equity._strength(b))
+        assert ours == fast, (a, b)
+    print("ok  fast evaluator ordering matches pure-python (4000 pairs)")
+
+
 def test_equity_sanity():
     rng = random.Random(3)
     strong = hand_equity(cards("As Ah"), cards("2c 7d 9h"), rng, trials=400)
@@ -229,6 +246,7 @@ if __name__ == "__main__":
     test_dead_raises_and_showdown_refund()
     test_engine_side_pots()
     test_engine_random_zero_sum()
+    test_fast_evaluator_agreement()
     test_equity_sanity()
     test_distilled_blueprint_roundtrip()
     test_mini_cfr_and_blueprint()

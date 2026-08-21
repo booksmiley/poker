@@ -10,7 +10,27 @@ pure Python.
 import random
 
 from .cards import preflop_class
-from .evaluator import evaluate
+
+# Hand-strength backend for the Monte-Carlo rollouts below. If the
+# optional `phevaluator` package is installed (pip install phevaluator),
+# its C evaluator is used — ~5x faster, and it happens to share our exact
+# card encoding (rank*4 + suit, suits in c/d/h/s order) so cards pass
+# straight through. It ranks hands with SMALLER numbers as better, so we
+# negate to keep "higher = stronger". The pure-Python implementation in
+# evaluator.py is the readable reference and produces identical orderings
+# (verified in tests); it remains the fallback and is still used by the
+# engine for showdowns and by the UI for hand names.
+try:
+    from phevaluator import evaluate_cards as _ph_evaluate
+
+    def _strength(cards):
+        return -_ph_evaluate(*cards)
+
+    FAST_EVAL = True
+except ImportError:
+    from .evaluator import evaluate as _strength
+
+    FAST_EVAL = False
 
 N_BUCKETS = 10
 # Monte-Carlo trials per equity estimate, by number of board cards dealt.
@@ -34,8 +54,8 @@ def hand_equity(hole, board, rng=None, trials=None):
         draw = rng.sample(remaining, 2 + need_board)
         opp = draw[:2]
         runout = draw[2:]
-        my = evaluate(my_base + runout)
-        their = evaluate(opp + list(board) + runout)
+        my = _strength(my_base + runout)
+        their = _strength(opp + list(board) + runout)
         if my > their:
             score += 1.0
         elif my == their:

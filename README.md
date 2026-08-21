@@ -131,6 +131,18 @@ of them.
 | **Equity** | Your chance of winning the pot if the remaining cards were dealt out with no more betting. The `?` advice shows an estimate vs one random hand. |
 | **GTO** | *Game-theory optimal* — a strategy that can't be exploited even by an opponent who knows it exactly. See the caveats below for what that means with 3+ players. |
 
+## Optional speedup
+
+```bash
+pip3 install phevaluator
+```
+
+If present, the equity rollouts use phevaluator's C hand evaluator (~5x
+faster raw, ~1.3x faster training; verified to rank hands identically to
+ours). Without it everything still runs on the pure-Python evaluator in
+`pokersim/evaluator.py`, which remains the readable reference
+implementation either way.
+
 ## Tools
 
 ```bash
