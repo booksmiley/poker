@@ -102,6 +102,7 @@ def test_engine_uncalled_bet():
     assert h.terminal and h.payoffs == [-1, -2, 3]
     assert h.uncalled == (2, 198)   # shove minus the 2 blinds it wins
     assert h.winners_info == [(2, 5)]
+    assert h.fold_street == [0, 0, None]
     print("ok  engine uncalled bet returned")
 
 

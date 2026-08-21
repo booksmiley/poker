@@ -39,6 +39,7 @@ class Hand:
         self.contrib = [0] * n_players
         self.street_contrib = [0] * n_players
         self.folded = [False] * n_players
+        self.fold_street = [None] * n_players   # street index when folded
         self.allin = [False] * n_players
         self.street = PREFLOP
         self.history = []          # abstract action tokens, '/' between streets
@@ -86,6 +87,7 @@ class Hand:
         h.contrib = self.contrib[:]
         h.street_contrib = self.street_contrib[:]
         h.folded = self.folded[:]
+        h.fold_street = self.fold_street[:]
         h.allin = self.allin[:]
         h.street = self.street
         h.history = self.history[:]
@@ -111,6 +113,7 @@ class Hand:
         if kind == "f":
             assert self.to_call(p) > 0, "cannot fold when checking is free"
             self.folded[p] = True
+            self.fold_street[p] = self.street
         elif kind == "c":
             self._pay(p, self.to_call(p))
         elif kind == "r":

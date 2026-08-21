@@ -130,19 +130,31 @@ def human_turn(hand, hp, blueprint, rng):
         print("  ? = advice, or one of: " + ", ".join(tokens))
 
 
+def fold_label(street):
+    return "folded preflop" if street == 0 else f"folded on the {STREET_WORDS[street]}"
+
+
+STREET_WORDS = ["preflop", "flop", "turn", "river"]
+
+
+def player_status(hand, p):
+    scores = getattr(hand, "showdown_scores", None) or {}
+    if p in scores:
+        return category_name(scores[p])
+    if hand.folded[p]:
+        return fold_label(hand.fold_street[p])
+    return "won uncontested"
+
+
 def reveal_cards(hand, names):
     """Show every player's cards at hand end — the bots play a fixed GTO
     blueprint, so revealing costs them nothing and helps you learn."""
-    scores = getattr(hand, "showdown_scores", None) or {}
     print("  Cards:")
     for p in range(hand.n):
-        if p in scores:
-            status = category_name(scores[p])
-        elif hand.folded[p]:
-            status = "folded"
-        else:
-            status = "won uncontested"
-        print(f"    {names[p]:>10}: {cards_str(hand.hole[p])}  ({status})")
+        print(
+            f"    {names[p]:>10}: {cards_str(hand.hole[p])}"
+            f"  ({player_status(hand, p)})"
+        )
 
 
 def play_hand(hand_no, n, blueprint, rng, human_pos, stacks, names):

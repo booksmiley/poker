@@ -12,9 +12,8 @@ from collections import deque
 
 from .ai import BotAgent
 from .cards import card_str, cards_str
-from .cli import POSITION_NAMES, describe_action, human_turn
+from .cli import POSITION_NAMES, describe_action, human_turn, player_status
 from .engine import Hand
-from .evaluator import category_name
 
 W, H = 76, 19                       # canvas size
 CX, CY, RX, RY = 37, 9, 29, 7       # seat ellipse
@@ -77,7 +76,7 @@ def draw(hand, names, human_pos, board_limit=None):
 
         bet = hand.street_contrib[s]
         if hand.folded[s]:
-            money = "folded"
+            money = "fold " + ("pre", "flop", "turn", "river")[hand.fold_street[s]]
         elif hand.allin[s]:
             money = f"ALL-IN {hand.contrib[s]}"
         else:
@@ -142,18 +141,10 @@ def play_hand_tui(hand_no, n, blueprint, rng, human_pos, stacks, names):
                     time.sleep(1.0)
         redraw()
 
-    extra = []
-    scores = getattr(hand, "showdown_scores", None) or {}
-    extra.append("  Cards:")
+    extra = ["  Cards:"]
     for p in range(n):
-        if p in scores:
-            status = category_name(scores[p])
-        elif hand.folded[p]:
-            status = "folded"
-        else:
-            status = "won uncontested"
         extra.append(
-            f"    {names[p]}: {cards_str(hand.hole[p])}  ({status})"
+            f"    {names[p]}: {cards_str(hand.hole[p])}  ({player_status(hand, p)})"
         )
     if hand.uncalled:
         p, amount = hand.uncalled
