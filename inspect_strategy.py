@@ -21,16 +21,23 @@ from pokersim.strategy import Blueprint
 ACTION_ORDER = "fchpa"  # for display only
 
 
+def node_actions(node):
+    """Action count for either format: full [regrets, sums] or distilled bytes."""
+    return len(node) if isinstance(node, bytes) else len(node[1])
+
+
 def spot_report(bp, key):
     node = bp.table.get(key)
     if node is None:
         print(f"'{key}' was never reached in training")
         return
-    probs = bp.probs(key, len(node[1]))
+    probs = bp.probs(key, node_actions(node))
     if probs is None:
         print(f"'{key}' has no accumulated strategy yet")
         return
-    print(f"{key}  ({sum(node[1]):.0f} strategy weight)")
+    weight = ("distilled" if isinstance(node, bytes)
+              else f"{sum(node[1]):.0f} strategy weight")
+    print(f"{key}  ({weight})")
     for i, pr in enumerate(probs):
         bar = "█" * int(round(pr * 30))
         print(f"  action {i}: {pr * 100:5.1f}%  {bar}")
@@ -42,7 +49,7 @@ def dominant_char(bp, key):
     node = bp.table.get(key)
     if node is None:
         return "."
-    probs = bp.probs(key, len(node[1]))
+    probs = bp.probs(key, node_actions(node))
     if probs is None:
         return "."
     # rebuild token order: f only if facing a bet; preflop always is
