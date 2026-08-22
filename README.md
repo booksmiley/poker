@@ -81,25 +81,52 @@ Your turn. Pot: 10. To call: 5, pot odds 33%. Stack: 198.
 python3 serve.py --players 4
 ```
 
-Your Mac hosts the table; it prints an address like `http://192.168.1.7:8080`.
-Anyone on the **same Wi-Fi** opens it in their phone browser — no app, no
-internet needed. Join with a name, tap Deal, and every seat without a
-human is played by the GTO bots. Each phone sees only its own cards, has
-its own `GTO ?` advice button, and absent players are auto-checked/folded
-after `--turn-timeout` seconds (default 45) so the table never stalls.
+Your Mac hosts the table; phones are just browsers — no app, no internet.
+The server loads the small distilled `bp_4p.gto` (ships with the repo) in
+a few seconds, so a fresh clone can host a table immediately.
 
-Offline / on a plane (Wi-Fi is allowed in airplane mode):
+### At home (same Wi-Fi)
 
-1. Easiest: a pocket travel router — everyone joins its network.
-2. Mac-only: System Settings → General → Sharing → Internet Sharing, share
-   from an unused interface (e.g. Thunderbolt Bridge) *to* Wi-Fi and set a
-   network name/password. That creates a local hotspot with no internet,
-   which is all the game needs. Then run `serve.py` and use the printed IP.
-3. First time, macOS asks whether Python may accept incoming connections —
-   allow it.
+1. On the Mac: `python3 serve.py --players 4`. It prints an address like
+   `http://192.168.1.7:8080`.
+2. First launch, macOS asks *"Do you want Python to accept incoming
+   network connections?"* — **Allow**. (Clicked Deny once? System
+   Settings → Network → Firewall → Options, allow Python.)
+3. On each phone (same Wi-Fi as the Mac): open that exact address in the
+   browser, including the `:8080`.
+4. Enter a name → *Sit down* → anyone taps *Deal the first hand*. Seats
+   without a human are GTO bots. On your turn: action buttons with
+   amounts, pot odds, a countdown, a raise-to box for custom sizes, and a
+   private `GTO ?` advice button per player. All cards are revealed at
+   hand end; *Next hand* continues.
+5. A phone that locks mid-hand is auto-checked/folded after
+   `--turn-timeout` seconds (default 45) so the table never stalls;
+   reopening the page rejoins the same seat (the browser remembers your
+   session). Two minutes fully absent and a bot takes the seat over.
 
-The server prefers the small distilled `bp_4p.gto` (ships with the repo),
-so a fresh clone can host a table immediately.
+### On a plane (no internet anywhere)
+
+Wi-Fi radios are allowed in airplane mode, and the game only needs the
+phones to reach the Mac. Do a dry run at home first.
+
+1. Create the Mac's own network: System Settings → **General → Sharing →
+   Internet Sharing** (the ⓘ). *Share your connection from:* an unused
+   port such as **Thunderbolt Bridge**; *To devices using:* **Wi-Fi**.
+   Under *Wi-Fi Options…* set a network name and WPA2 password. Toggle
+   Internet Sharing on. (A pocket travel router works too.)
+2. Phones: airplane mode on, re-enable Wi-Fi, join that network. Ignore
+   the "No Internet Connection" warning — none is needed.
+3. Mac: `caffeinate -dims python3 serve.py --players 4` (the caffeinate
+   keeps the Mac from sleeping mid-session), lid open. Phones open the
+   printed address — the IP differs per network, so always use what it
+   prints.
+
+### If a phone can't load the page
+
+Almost always one of: the phone is on a different network (turn cellular
+data off so it can't route around); the `:8080` was dropped from the URL;
+the firewall prompt was denied; or the Mac's IP changed after switching
+networks (restart `serve.py`, use the newly printed address).
 
 ## Glossary (all the abbreviations the interface uses)
 
@@ -192,7 +219,10 @@ and are specific to a player count, in two formats:
   the size cap it is auto-split into `.partNN` files that the game
   recombines transparently.
 
-`play.py` prefers the full `.pkl` when present, else the `.gto`.
+`play.py` and `serve.py` prefer the distilled `.gto` when it exists
+(seconds to load); pass `--blueprint blueprints/bp_4p.pkl` to play against
+the full checkpoint instead. Refresh the `.gto` after more training with
+`python3 distill.py --players 4`.
 
 ## How the "GTO" works (and its limits)
 

@@ -14,11 +14,12 @@ from pokersim.strategy import Blueprint, blueprint_exists
 
 
 def default_path(n):
-    """Prefer the full local blueprint; fall back to a distilled .gto
-    (possibly split into .partNN files, e.g. fresh from git clone)."""
-    full = os.path.join("blueprints", f"bp_{n}p.pkl")
+    """Prefer the distilled .gto — it plays the same strategy (<1%
+    quantization error) but loads in seconds instead of a minute once the
+    full training checkpoint grows large. Pass --blueprint for the .pkl."""
     dist = os.path.join("blueprints", f"bp_{n}p.gto")
-    if not blueprint_exists(full) and blueprint_exists(dist):
+    full = os.path.join("blueprints", f"bp_{n}p.pkl")
+    if blueprint_exists(dist):
         return dist
     return full
 

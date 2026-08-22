@@ -54,6 +54,30 @@ def action_label(hand, p, token, action):
     return f"{verb} {target}" + (f" ({size})" if size else "")
 
 
+# (name, example, % of 7-card hands that end up as this, note)
+HAND_GUIDE = [
+    ("Straight Flush",  "9♥ 8♥ 7♥ 6♥ 5♥", 0.03, "five in a row, all one suit"),
+    ("Four of a Kind",  "K♠ K♥ K♦ K♣ 3♦", 0.17, "quads"),
+    ("Full House",      "Q♠ Q♥ Q♦ 8♣ 8♦", 2.60, "trips + a pair"),
+    ("Flush",           "A♣ J♣ 8♣ 6♣ 2♣", 3.03, "five of one suit"),
+    ("Straight",        "8♠ 7♦ 6♥ 5♣ 4♠", 4.62, "five in a row"),
+    ("Three of a Kind", "7♠ 7♥ 7♦ K♣ 2♦", 4.83, "trips"),
+    ("Two Pair",        "J♠ J♥ 4♦ 4♣ A♠", 23.5, ""),
+    ("Pair",            "T♠ T♥ A♦ 7♣ 3♠", 43.8, ""),
+    ("High Card",       "A♠ Q♦ 9♥ 6♣ 3♠", 17.4, "nothing made"),
+]
+
+
+def show_hand_guide():
+    print("\n  ── Hand rankings, best → worst ──")
+    print("  (bar: how often 7 cards end up making this by the river)\n")
+    for i, (name, example, freq, note) in enumerate(HAND_GUIDE, 1):
+        bar = "█" * round(freq / 2.5) or ("▏" if freq < 1 else "")
+        note_s = f"  ({note})" if note else ""
+        print(f"  {i}. {name:<16} {example}  {freq:>5.2f}%  {bar}{note_s}")
+    print()
+
+
 def show_advice(blueprint, hand, hp, rng):
     acts, probs, trained = spot_strategy(blueprint, hand, hp, rng)
     hole = hand.hole[hp]
@@ -88,6 +112,7 @@ def human_turn(hand, hp, blueprint, rng):
     if can_custom:
         parts.append("[b <amt>] raise to amt")
     parts.append("[?] advice")
+    parts.append("[g] hand ranks")
     parts.append("[q] quit")
 
     odds = f", pot odds {tc / (pot + tc) * 100:.0f}%" if tc else ""
@@ -110,6 +135,9 @@ def human_turn(hand, hp, blueprint, rng):
             raise QuitSession
         if raw == "?":
             show_advice(blueprint, hand, hp, rng)
+            continue
+        if raw == "g":
+            show_hand_guide()
             continue
         if raw in tokens:
             return tokens[raw]
@@ -225,7 +253,8 @@ def run_session(blueprint, seed=None, max_hands=None, ui="table", persistent=Tru
         f"\nLoaded blueprint: {n} players, trained {blueprint.iters_done:,} "
         f"iterations, {len(blueprint.table):,} infosets."
     )
-    print("Type ? at any decision to see the blueprint's strategy for your spot.")
+    print("At any decision: ? shows the blueprint's strategy for your spot, "
+          "g shows the hand-ranking chart.")
     try:
         while max_hands is None or hands < max_hands:
             if not persistent:
