@@ -3,7 +3,7 @@
 *.pkl
 
 # training logs and runtime artifacts
-train.log
+train*.log
 nohup.out
 
 # python
