@@ -121,7 +121,7 @@ function seatHTML(seat) {
 function render(s) {
   // preserve any in-progress typing across the 1s re-render
   const keep = {};
-  for (const id of ['amt', 'nm']) {
+  for (const id of ['amt', 'nm', 'pw']) {
     const el = document.getElementById(id);
     if (el) keep[id] = {val: el.value, focus: document.activeElement === el};
   }
@@ -137,9 +137,13 @@ function render(s) {
 }
 
 function renderJoin(s) {
+  const pw = s.needs_password
+    ? `<input class="name" id="pw" type="password" placeholder="Table password">`
+    : '';
   $app.innerHTML = `<h1>Poker vs GTO</h1>
     <div class="panel"><h3>Join the table</h3>
       <input class="name" id="nm" placeholder="Your name" maxlength="12">
+      ${pw}
       <button onclick="doJoin()">Sit down</button></div>
     <div class="panel"><h3>At the table</h3>
       ${s.players.map(p => `<div class="row2"><span>${p.name}${p.is_bot ? ' 🤖' : ''}</span><span>${p.chips}</span></div>`).join('')}
@@ -223,7 +227,8 @@ function adviceHTML(a) {
 
 async function doJoin() {
   const name = document.getElementById('nm').value;
-  const r = await api('/join', {name});
+  const pwEl = document.getElementById('pw');
+  const r = await api('/join', {name, password: pwEl ? pwEl.value : undefined});
   if (r.error) return toast(r.error);
   token = r.token; localStorage.setItem('pk_token', token);
   poll();

@@ -27,6 +27,9 @@ def main():
                     help="continue training an existing blueprint")
     ap.add_argument("--seed", type=int, default=None)
     ap.add_argument("--save-every", type=int, default=2000)
+    ap.add_argument("--distill-every", type=int, default=100000,
+                    help="also refresh the distilled .gto at every N total "
+                         "iterations (0 disables)")
     args = ap.parse_args()
 
     path = args.out or default_path(args.players)
@@ -40,7 +43,9 @@ def main():
 
     print(f"Running {args.iters:,} MCCFR iterations "
           f"(each = {trainer.n} traversals)...")
-    trainer.run(args.iters, save_path=path, save_every=args.save_every)
+    gto_path = os.path.splitext(path)[0] + ".gto"
+    trainer.run(args.iters, save_path=path, save_every=args.save_every,
+                distill_every=args.distill_every, distill_path=gto_path)
     print(f"Saved {path}: {trainer.iters_done:,} total iterations, "
           f"{len(trainer.table):,} infosets.")
 

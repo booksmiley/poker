@@ -18,8 +18,8 @@ import pickle
 DIST_FORMAT = "gto-dist-1"
 
 
-def save_blueprint(path, trainer):
-    data = {
+def trainer_data(trainer):
+    return {
         "n_players": trainer.n,
         "stack": trainer.stack,
         "sb": trainer.sb,
@@ -27,6 +27,10 @@ def save_blueprint(path, trainer):
         "iters_done": trainer.iters_done,
         "table": trainer.table,
     }
+
+
+def save_blueprint(path, trainer):
+    data = trainer_data(trainer)
     os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
     tmp = path + ".tmp"
     with open(tmp, "wb") as f:
@@ -55,13 +59,17 @@ def load_blueprint_data(path):
     return pickle.loads(blob)
 
 
-def save_distilled(path, data, mass=0.999, max_part_bytes=90 * 1024 * 1024):
+def save_distilled(path, data, mass=0.999, max_part_bytes=90 * 1024 * 1024,
+                   max_entries=None):
     """Write a play-only blueprint: drop regrets, prune infosets outside
-    the top `mass` fraction of strategy weight, quantize probabilities to
-    uint8. Returns (entries_kept, file_list)."""
+    the top `mass` fraction of strategy weight (and, if `max_entries` is
+    set, keep at most that many highest-weight entries — used to fit small
+    servers), quantize probabilities to uint8.
+    Returns (entries_kept, file_list, mass_fraction_kept)."""
     table = data["table"]
     totals = sorted(t for t in (sum(n[1]) for n in table.values()) if t > 0)
-    cutoff_mass = sum(totals) * (1.0 - mass)
+    grand_total = sum(totals)
+    cutoff_mass = grand_total * (1.0 - mass)
     acc = 0.0
     thresh = 0.0
     for t in totals:
@@ -69,14 +77,28 @@ def save_distilled(path, data, mass=0.999, max_part_bytes=90 * 1024 * 1024):
         if acc > cutoff_mass:
             thresh = t
             break
+    tie_budget = None
+    if max_entries and max_entries < len(totals):
+        import bisect
+        thresh = max(thresh, totals[-max_entries])
+        # entries strictly above the threshold all fit; entries exactly AT
+        # it may be tied — keep only as many of those as the cap allows
+        above = len(totals) - bisect.bisect_right(totals, thresh)
+        tie_budget = max_entries - above
 
     packed = {}
+    mass_kept = 0.0
     for key, node in table.items():
         sums = node[1]
         tot = sum(sums)
         if tot < thresh or tot <= 0:
             continue
+        if tot == thresh and tie_budget is not None:
+            if tie_budget <= 0:
+                continue
+            tie_budget -= 1
         packed[key] = bytes(min(255, round(x / tot * 255)) for x in sums)
+        mass_kept += tot
 
     out = {
         "format": DIST_FORMAT,
@@ -104,7 +126,7 @@ def save_distilled(path, data, mass=0.999, max_part_bytes=90 * 1024 * 1024):
             with open(part, "wb") as f:
                 f.write(blob[i:i + max_part_bytes])
             files.append(part)
-    return len(packed), files
+    return len(packed), files, (mass_kept / grand_total if grand_total else 0.0)
 
 
 class Blueprint:

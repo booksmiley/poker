@@ -24,6 +24,9 @@ def main():
                     help="fraction of strategy weight to preserve")
     ap.add_argument("--max-part-mb", type=int, default=90,
                     help="split output into parts no larger than this")
+    ap.add_argument("--max-entries", type=int, default=None,
+                    help="keep at most this many highest-weight infosets "
+                         "(slim blueprints for small servers)")
     args = ap.parse_args()
 
     src = args.blueprint or os.path.join("blueprints", f"bp_{args.players}p.pkl")
@@ -34,11 +37,14 @@ def main():
         raise SystemExit(f"{src} is already distilled")
     total = len(data["table"])
     print(f"{total:,} infosets at {data['iters_done']:,} iterations; distilling...")
-    kept, files = save_distilled(
+    kept, files, mass_kept = save_distilled(
         out, data, mass=args.mass,
         max_part_bytes=args.max_part_mb * 1024 * 1024,
+        max_entries=args.max_entries,
     )
-    print(f"Kept {kept:,}/{total:,} infosets ({kept / total * 100:.0f}%).")
+    print(f"Kept {kept:,}/{total:,} infosets "
+          f"({kept / total * 100:.0f}%, {mass_kept * 100:.2f}% of "
+          f"strategy weight).")
     for f in files:
         print(f"  {f}  ({os.path.getsize(f) / 1e6:.1f} MB)")
 

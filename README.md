@@ -121,6 +121,36 @@ phones to reach the Mac. Do a dry run at home first.
    printed address — the IP differs per network, so always use what it
    prints.
 
+### Host it on Render (play away from your laptop)
+
+The repo deploys to [Render](https://render.com)'s free tier as-is:
+
+1. On Render: **New → Blueprint**, connect this GitHub repo — `render.yaml`
+   configures everything (free plan, Python, start command using the slim
+   blueprint).
+2. Set the `TABLE_PASSWORD` environment variable when prompted — the
+   URL is public internet, so the password keeps strangers out of your
+   game. Players enter it once when joining.
+3. Open `https://<your-app>.onrender.com` on any phone, anywhere.
+
+Free-tier realities:
+
+- **No per-hand cost.** Render bills instance hours (750 free/month —
+  a whole month of uptime) and bandwidth (100GB; a full evening of play
+  uses a few MB). Play as many hands as you like.
+- **512MB RAM** is why the deploy uses `bp_4p_slim.gto`: the top 1.2M
+  infosets by training weight (95% of all strategy mass, every preflop
+  spot included) loading to ~310MB, vs 1.8GB for the full distilled
+  table. Rarely-reached spots fall back to a passive default.
+- **Sleep after 15 idle minutes**: the first visit after a break takes
+  ~a minute to wake, and the table (chips, seats) resets — it lives in
+  memory. During play, the phones' polling keeps it awake.
+
+To serve the slim blueprint locally instead (or test before deploying):
+`python3 serve.py --players 4 --blueprint blueprints/bp_4p_slim.gto`.
+Regenerate it after more training with
+`python3 distill.py --players 4 --max-entries 1200000 --out blueprints/bp_4p_slim.gto`.
+
 ### If a phone can't load the page
 
 Almost always one of: the phone is on a different network (turn cellular

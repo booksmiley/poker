@@ -93,7 +93,7 @@ def make_handler(table):
             data = self._body()
             token = data.get("token")
             if url.path == "/join":
-                self._json(table.join(data.get("name")))
+                self._json(table.join(data.get("name"), data.get("password")))
             elif url.path == "/act":
                 self._json(table.act(token, data))
             elif url.path == "/next":
@@ -108,10 +108,16 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--players", type=int, default=4, choices=[3, 4, 5, 6])
     ap.add_argument("--blueprint", default=None)
-    ap.add_argument("--port", type=int, default=8080)
+    ap.add_argument("--port", type=int,
+                    default=int(os.environ.get("PORT", "8080")),
+                    help="port to listen on (defaults to $PORT for "
+                         "cloud hosts like Render)")
     ap.add_argument("--seed", type=int, default=None)
     ap.add_argument("--turn-timeout", type=int, default=45,
                     help="seconds before an absent player auto-checks/folds")
+    ap.add_argument("--password", default=os.environ.get("TABLE_PASSWORD"),
+                    help="require this password to join (defaults to "
+                         "$TABLE_PASSWORD; empty = open table)")
     args = ap.parse_args()
 
     path = pick_blueprint(args.players, args.blueprint)
@@ -120,7 +126,7 @@ def main():
     if bp.n_players != args.players:
         raise SystemExit(f"{path} is for {bp.n_players} players")
     table = WebTable(bp, seats=args.players, seed=args.seed,
-                     turn_timeout=args.turn_timeout)
+                     turn_timeout=args.turn_timeout, password=args.password)
     server = ThreadingHTTPServer(("0.0.0.0", args.port), make_handler(table))
     print(f"\n  Table ready: {args.players} seats, blinds {bp.sb}/{bp.bb}, "
           f"trained {bp.iters_done:,} iterations")

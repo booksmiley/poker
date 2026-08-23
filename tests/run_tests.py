@@ -199,8 +199,16 @@ def test_distilled_blueprint_roundtrip():
 
     # tiny part size forces the split-and-recombine path
     dist_path = os.path.join(tmp, "bp.gto")
-    kept, files = save_distilled(dist_path, data, mass=1.0, max_part_bytes=4096)
+    kept, files, mass_kept = save_distilled(dist_path, data, mass=1.0,
+                                            max_part_bytes=4096)
     assert len(files) > 1 and all(".part" in f for f in files)
+    assert mass_kept > 0.99
+    # slim mode: max_entries caps what is kept
+    slim_path = os.path.join(tmp, "slim.gto")
+    slim_kept, _, _ = save_distilled(slim_path, data, mass=1.0,
+                                     max_entries=50)
+    assert slim_kept == 50  # cap is strict even with tied weights
+    assert Blueprint.load(slim_path).n_players == 3
     dist = Blueprint.load(dist_path)
     assert dist.n_players == 3 and len(dist.table) == kept
     checked = 0
@@ -261,6 +269,21 @@ def _drive_to_showdown(table, tokens, max_steps=600):
                 r = table.act(tok, {"action": "c"})
                 assert "error" not in r, r
     raise AssertionError("hand never finished")
+
+
+def test_train_with_periodic_distill():
+    from pokersim.strategy import Blueprint
+
+    tmp = tempfile.mkdtemp()
+    pkl = os.path.join(tmp, "bp.pkl")
+    gto = os.path.join(tmp, "bp.gto")
+    tr = Trainer(3, seed=23)
+    tr.run(25, log_every=0, save_path=pkl, save_every=0,
+           distill_every=10, distill_path=gto)
+    bp = Blueprint.load(gto)
+    assert bp.n_players == 3 and bp.iters_done == 20  # milestones 10 and 20
+    assert len(bp.table) > 0
+    print("ok  training refreshes distilled blueprint at milestones")
 
 
 def test_webtable_two_humans():
@@ -365,6 +388,7 @@ if __name__ == "__main__":
     test_equity_sanity()
     test_distilled_blueprint_roundtrip()
     test_mini_cfr_and_blueprint()
+    test_train_with_periodic_distill()
     test_webtable_two_humans()
     test_webtable_timeout_autoplay()
     test_http_server()

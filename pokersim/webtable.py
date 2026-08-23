@@ -28,9 +28,10 @@ def card_codes(cards):
 
 class WebTable:
     def __init__(self, blueprint, seats=4, seed=None, turn_timeout=45,
-                 bot_delay=0.9, idle_timeout=120):
+                 bot_delay=0.9, idle_timeout=120, password=None):
         assert 3 <= seats <= 6
         self.bp = blueprint
+        self.password = password or None
         self.n = seats
         self.rng = random.Random(seed)
         self.bot = BotAgent(blueprint, self.rng)
@@ -63,9 +64,11 @@ class WebTable:
         self.seq += 1
 
     # ---- membership ---------------------------------------------------
-    def join(self, name):
+    def join(self, name, password=None):
         name = (name or "Player").strip()[:12] or "Player"
         with self.lock:
+            if self.password and password != self.password:
+                return {"error": "wrong table password"}
             token = secrets.token_hex(8)
             if self.phase == "hand":
                 if len(self.tokens) + len(self.pending) >= self.n:
@@ -249,6 +252,7 @@ class WebTable:
                 "log": list(self.log),
                 "you": {"seated": idx is not None,
                         "pending": any(t == token for t, _ in self.pending)},
+                "needs_password": bool(self.password),
                 "players": [{"name": p["name"], "chips": p["chips"],
                              "is_bot": p["kind"] == "bot",
                              "you": i == idx}

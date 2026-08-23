@@ -1,0 +1,2 @@
+# optional accelerator for equity rollouts (pure-Python fallback exists)
+phevaluator

@@ -18,7 +18,8 @@ import time
 
 from .abstraction import abstract_actions, infoset_key
 from .engine import Hand
-from .strategy import load_blueprint_data, save_blueprint
+from .strategy import (load_blueprint_data, save_blueprint, save_distilled,
+                       trainer_data)
 
 
 def regret_matching(regrets):
@@ -116,10 +117,15 @@ class Trainer:
                 regrets[i] *= factor
                 sums[i] *= factor
 
-    def run(self, iters, log_every=200, save_path=None, save_every=2000):
+    def run(self, iters, log_every=200, save_path=None, save_every=2000,
+            distill_every=0, distill_path=None):
         start = time.time()
         first = self.iters_done + 1
         next_discount = self.iters_done + self._discount_gap(max(self.iters_done, 1))
+        # optionally refresh a distilled play blueprint at fixed milestones
+        next_distill = None
+        if distill_every and distill_path:
+            next_distill = (self.iters_done // distill_every + 1) * distill_every
         # training allocates millions of acyclic objects; the cyclic
         # collector only adds full-heap scan pauses
         gc_was_enabled = gc.isenabled()
@@ -142,6 +148,13 @@ class Trainer:
                     )
                 if save_path and save_every and done % save_every == 0:
                     self.save(save_path)
+                if next_distill and t >= next_distill:
+                    print(f"  distilling {distill_path} at {t:,} iterations...")
+                    kept, files, _ = save_distilled(distill_path,
+                                                    trainer_data(self))
+                    print(f"  distilled: {kept:,} infosets -> "
+                          + ", ".join(files))
+                    next_distill = (t // distill_every + 1) * distill_every
         finally:
             if gc_was_enabled:
                 gc.enable()

@@ -1,0 +1,12 @@
+services:
+  - type: web
+    name: poker-gto
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: python serve.py --players 4 --blueprint blueprints/bp_4p_slim.gto
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.9
+      - key: TABLE_PASSWORD
+        sync: false
