@@ -51,6 +51,9 @@ def make_handler(table):
         index_html = f.read()
 
     class Handler(BaseHTTPRequestHandler):
+        protocol_version = "HTTP/1.1"  # keep-alive: fewer connection
+                                       # setups on high-latency links
+
         def log_message(self, *args):
             pass
 
