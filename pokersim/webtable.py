@@ -28,7 +28,8 @@ def card_codes(cards):
 
 class WebTable:
     def __init__(self, blueprint, seats=4, seed=None, turn_timeout=45,
-                 bot_delay=0.9, idle_timeout=120, password=None):
+                 bot_delay=0.9, idle_timeout=120, password=None,
+                 next_hand_timeout=30):
         assert 3 <= seats <= 6
         self.bp = blueprint
         self.password = password or None
@@ -39,6 +40,7 @@ class WebTable:
         self.turn_timeout = turn_timeout
         self.bot_delay = bot_delay
         self.idle_timeout = idle_timeout
+        self.next_hand_timeout = next_hand_timeout
         self.buyin = blueprint.stack
 
         # persistent players (index = identity); bots fill non-human slots
@@ -53,6 +55,8 @@ class WebTable:
         self.log = deque(maxlen=14)
         self.result = None
         self.turn_deadline = None
+        self.next_hand_ready = set()
+        self.next_hand_deadline = None
         self.last_bot_act = 0.0
         self.seq = 0
 
@@ -100,6 +104,7 @@ class WebTable:
                 self.log.append(f"{p['name']} left (idle) — a bot takes over")
                 self.players[idx] = self._fresh_bot(idx)
                 del self.tokens[token]
+                self.next_hand_ready.discard(token)
                 self._bump()
 
     # ---- hand lifecycle ----------------------------------------------
@@ -107,38 +112,85 @@ class WebTable:
         with self.lock:
             if self.phase == "hand":
                 return {"error": "hand already running"}
+            self._prune_idle()
             if token not in self.tokens and \
                     not any(t == token for t, _ in self.pending):
                 return {"error": "join first"}
-            self._prune_idle()
-            for tok, name in self.pending:
-                idx = self._seat_human(tok, name)
-                if idx is None:
-                    break
-            self.pending = [(t, nm) for t, nm in self.pending
-                            if t not in self.tokens]
-            if not self.tokens:
-                return {"error": "join first"}
-            for i, p in enumerate(self.players):
-                if p["chips"] <= 0:
-                    p["chips"] += self.buyin
-                    self.log.append(f"{p['name']} rebuys for {self.buyin}")
-            self.hand_no += 1
-            k = self.hand_no - 1
-            self.seat_of = [(self.n - 1 - i - k) % self.n
-                            for i in range(self.n)]
-            self.player_at = [0] * self.n
-            for i, s in enumerate(self.seat_of):
-                self.player_at[s] = i
-            stacks = [self.players[self.player_at[s]]["chips"]
-                      for s in range(self.n)]
-            self.hand = Hand(self.n, stacks, self.bp.sb, self.bp.bb,
-                             rng=self.rng)
+            if self.phase == "showdown":
+                self.next_hand_ready.add(token)
+                if self.next_hand_deadline is None:
+                    self.next_hand_deadline = (time.time()
+                                               + self.next_hand_timeout)
+                if not self._all_humans_ready():
+                    self._bump()
+                    return {"ok": True, "waiting": True}
+            return self._deal_hand()
+
+    def _human_tokens(self):
+        """Tokens that can ready up, including players joining next hand."""
+        return set(self.tokens) | {token for token, _ in self.pending}
+
+    def _all_humans_ready(self):
+        humans = self._human_tokens()
+        return bool(humans) and humans <= self.next_hand_ready
+
+    def _deal_hand(self):
+        for tok, name in self.pending:
+            idx = self._seat_human(tok, name)
+            if idx is None:
+                break
+        self.pending = [(t, nm) for t, nm in self.pending
+                        if t not in self.tokens]
+        if not self.tokens:
+            self.next_hand_ready.clear()
+            self.next_hand_deadline = None
+            return {"error": "join first"}
+        for i, p in enumerate(self.players):
+            if p["chips"] <= 0:
+                p["chips"] += self.buyin
+                self.log.append(f"{p['name']} rebuys for {self.buyin}")
+        self.hand_no += 1
+        k = self.hand_no - 1
+        self.seat_of = [(self.n - 1 - i - k) % self.n
+                        for i in range(self.n)]
+        self.player_at = [0] * self.n
+        for i, s in enumerate(self.seat_of):
+            self.player_at[s] = i
+        stacks = [self.players[self.player_at[s]]["chips"]
+                  for s in range(self.n)]
+        self.hand = Hand(self.n, stacks, self.bp.sb, self.bp.bb,
+                         rng=self.rng)
+        self.result = None
+        self.next_hand_ready.clear()
+        self.next_hand_deadline = None
+        self.log.append(f"— Hand #{self.hand_no} —")
+        self.phase = "hand"
+        self.last_bot_act = time.time()
+        self._arm_deadline()
+        self._bump()
+        return {"ok": True}
+
+    def reset_table(self, token):
+        """Abort play and restore a fresh lobby without ejecting humans."""
+        with self.lock:
+            idx = self.tokens.get(token)
+            if idx is None:
+                return {"error": "not seated"}
+            reset_by = self.players[idx]["name"]
+            for p in self.players:
+                p["chips"] = self.buyin
+            self.phase = "lobby"
+            self.hand = None
+            self.hand_no = 0
+            self.seat_of = None
+            self.player_at = None
             self.result = None
-            self.log.append(f"— Hand #{self.hand_no} —")
-            self.phase = "hand"
-            self.last_bot_act = time.time()
-            self._arm_deadline()
+            self.turn_deadline = None
+            self.next_hand_ready.clear()
+            self.next_hand_deadline = None
+            self.last_bot_act = 0.0
+            self.log.clear()
+            self.log.append(f"{reset_by} stopped play and reset the table")
             self._bump()
             return {"ok": True}
 
@@ -170,6 +222,10 @@ class WebTable:
             if self.phase != "hand" or self.hand.terminal:
                 if self.phase != "hand":
                     self._prune_idle()
+                if self.phase == "showdown" and \
+                        self.next_hand_deadline is not None and \
+                        time.time() >= self.next_hand_deadline:
+                    self._deal_hand()
                 return
             seat = self.hand.to_act
             player = self.players[self.player_at[seat]]
@@ -202,6 +258,8 @@ class WebTable:
                        "net": {str(s): h.payoffs[s] for s in range(self.n)}}
         self.phase = "showdown"
         self.turn_deadline = None
+        self.next_hand_ready.clear()
+        self.next_hand_deadline = None
 
     # ---- human actions ------------------------------------------------
     def act(self, token, data):
@@ -258,6 +316,17 @@ class WebTable:
                              "you": i == idx}
                             for i, p in enumerate(self.players)],
             }
+            if self.phase == "showdown":
+                humans = self._human_tokens()
+                state["next_hand"] = {
+                    "ready": len(humans & self.next_hand_ready),
+                    "total": len(humans),
+                    "you_ready": token in self.next_hand_ready,
+                    "deadline": (max(0, round(self.next_hand_deadline
+                                              - time.time()))
+                                 if self.next_hand_deadline is not None
+                                 else None),
+                }
             if h is None:
                 return state
             reveal_all = self.phase == "showdown"

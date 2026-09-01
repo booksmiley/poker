@@ -5,6 +5,7 @@ import os
 import random
 import sys
 import tempfile
+import time
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
@@ -305,13 +306,40 @@ def test_webtable_two_humans():
     s = _drive_to_showdown(t, [tok1, tok2])
     assert all(x["cards"] is not None for x in s["seats"])  # full reveal
     assert sum(p["chips"] for p in t.players) == 4 * 200    # zero-sum
-    assert t.start_hand(tok2)["ok"] and t.hand_no == 2      # rotation works
+    r = t.start_hand(tok2)
+    assert r["ok"] and r["waiting"] and t.hand_no == 1
+    ready = t.state_for(tok2)["next_hand"]
+    assert ready["ready"] == 1 and ready["total"] == 2
+    assert t.start_hand(tok1)["ok"] and t.hand_no == 2      # all ready
     _drive_to_showdown(t, [tok1, tok2])
     assert sum(p["chips"] for p in t.players) == 4 * 200
+    assert t.start_hand(tok1)["waiting"]
+    assert t.start_hand(tok2)["ok"] and t.phase == "hand"
+    assert t.reset_table(tok1)["ok"]
+    assert t.phase == "lobby" and t.hand is None and t.hand_no == 0
+    assert all(p["chips"] == 200 for p in t.players)
+    assert len(t.tokens) == 2                                # humans stay seated
     # unknown token can't act or deal
     assert "error" in t.act("nope", {"action": "c"})
     assert "error" in t.start_hand("nope")
-    print("ok  webtable: two humans, privacy, zero-sum, rotation")
+    assert "error" in t.reset_table("nope")
+    print("ok  webtable: privacy, ready-up, rotation, reset")
+
+
+def test_webtable_next_hand_countdown():
+    from pokersim.webtable import WebTable
+
+    t = WebTable(_FakeBP(), seats=3, seed=5, turn_timeout=999,
+                 bot_delay=0, next_hand_timeout=30)
+    tok1, tok2 = t.join("Ann")["token"], t.join("Bob")["token"]
+    t.start_hand(tok1)
+    _drive_to_showdown(t, [tok1, tok2])
+    assert t.start_hand(tok1)["waiting"]
+    assert t.phase == "showdown" and t.hand_no == 1
+    t.next_hand_deadline = time.time() - 1
+    assert t.state_for(tok1)["phase"] == "hand"
+    assert t.hand_no == 2
+    print("ok  webtable: next hand starts when ready window expires")
 
 
 def test_webtable_timeout_autoplay():
@@ -372,8 +400,12 @@ def test_http_server():
     else:
         raise AssertionError("HTTP hand never finished")
     assert "error" in post("/act", {"token": "bogus", "action": "c"})
+    assert post("/next", {"token": tok})["ok"]
+    assert json.loads(get(f"/state?token={tok}")[1])["phase"] == "hand"
+    assert post("/reset", {"token": tok})["ok"]
+    assert json.loads(get(f"/state?token={tok}")[1])["phase"] == "lobby"
     httpd.shutdown()
-    print("ok  http server: join/state/act/next end-to-end")
+    print("ok  http server: join/state/act/next/reset end-to-end")
 
 
 if __name__ == "__main__":
@@ -390,6 +422,7 @@ if __name__ == "__main__":
     test_mini_cfr_and_blueprint()
     test_train_with_periodic_distill()
     test_webtable_two_humans()
+    test_webtable_next_hand_countdown()
     test_webtable_timeout_autoplay()
     test_http_server()
     print("\nall tests passed")

@@ -49,6 +49,7 @@
   button.call { background: #2e6da4; }
   button.allin { background: #7a2f52; }
   button.ghost { background: #24513c; color: #cfe0c8; }
+  button.reset { background: #8c3a34; }
   .raiserow { display: flex; gap: 8px; margin-top: 8px; }
   .raiserow input { flex: 1; min-width: 60px; border-radius: 9px; border: 0;
                     padding: 10px; font-size: 16px; background:#0f2a1e; color:#fff;
@@ -167,6 +168,7 @@ function renderTable(s) {
   const board = [0,1,2,3,4].map(i => cardHTML(s.board[i] !== undefined ? s.board[i] : undefined));
   let html = `<div class="bar"><span>Hand #${s.hand_no} · <b>${s.street}</b></span>
       <span>Pot <b>${s.pot}</b></span></div>
+    ${s.you.seated ? '<div class="actions" style="justify-content:flex-end;margin:0 0 8px"><button class="reset" onclick="resetTable()">Stop &amp; reset table</button></div>' : ''}
     <div class="opps ${opps.length >= 3 ? 'three' : ''}">${opps.map(seatHTML).join('')}</div>
     <div class="board">${board.join('')}</div>
     <div class="log">${s.log.slice(-5).join('<br>')}</div>`;
@@ -200,6 +202,10 @@ function renderTable(s) {
 
   if (s.phase === 'showdown' && s.result) {
     const r = s.result;
+    const nh = s.next_hand || {ready:0, total:0, you_ready:false, deadline:null};
+    const wait = nh.deadline == null
+      ? `<div class="info" style="margin-top:8px;font-size:12px">The next hand starts when all humans are ready. The first click starts a 30s timer.</div>`
+      : `<div class="info" style="margin-top:8px"><span>${nh.ready}/${nh.total} humans ready</span> · next hand in <span id="nhddl">${nh.deadline}s</span></div>`;
     html += `<div class="panel"><h3>Hand over</h3>
       ${r.reveal.map(x => `<div class="row2"><span>${x.name}</span>
         <span style="display:flex;gap:4px">${x.cards.map(c => cardHTML(c)).join('')}</span>
@@ -207,7 +213,8 @@ function renderTable(s) {
       ${r.uncalled ? `<div class="row2"><span>${r.uncalled.name} takes back ${r.uncalled.amount} (uncalled)</span></div>` : ''}
       ${r.winners.map(w => `<div class="row2"><b>${w.name} wins ${w.amount}</b></div>`).join('')}
       ${s.you.net != null ? `<div class="net" style="margin-top:6px">Your result: ${s.you.net >= 0 ? '+' : ''}${s.you.net}</div>` : ''}
-      <div class="actions"><button onclick="nextHand()">Next hand</button></div></div>`;
+      ${wait}
+      <div class="actions"><button onclick="nextHand()" ${nh.you_ready ? 'disabled' : ''}>${nh.you_ready ? 'Ready ✓' : 'Ready for next hand'}</button></div></div>`;
   }
   $app.innerHTML = html;
 }
@@ -259,6 +266,13 @@ async function nextHand() {
   if (r.error) { toast(r.error); if (lastState) render(lastState); }
   await poll(true);
 }
+async function resetTable() {
+  if (!window.confirm('Stop the current play and reset every stack to the starting buy-in?')) return;
+  freezeButtons();
+  const r = await api('/reset', {});
+  if (r.error) { toast(r.error); if (lastState) render(lastState); }
+  await poll(true);
+}
 async function getAdvice() {
   advice = await api('/advice');
   if (lastState) render(lastState);
@@ -272,6 +286,9 @@ function updateCountdown(s) {
   const el = document.getElementById('ddl');
   if (el && s.you && s.you.deadline != null)
     el.textContent = '⏱ ' + s.you.deadline + 's';
+  const next = document.getElementById('nhddl');
+  if (next && s.next_hand && s.next_hand.deadline != null)
+    next.textContent = s.next_hand.deadline + 's';
 }
 
 async function poll(force) {

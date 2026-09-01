@@ -98,7 +98,11 @@ a few seconds, so a fresh clone can host a table immediately.
    without a human are GTO bots. On your turn: action buttons with
    amounts, pot odds, a countdown, a raise-to box for custom sizes, and a
    private `GTO ?` advice button per player. All cards are revealed at
-   hand end; *Next hand* continues.
+   hand end. The next hand starts as soon as every human taps *Ready for
+   next hand*. Once the first player is ready, a 30-second countdown
+   guarantees the game continues even if somebody does not respond.
+   Any seated human can use *Stop & reset table* to abort the current
+   hand, restore the starting stacks, and return everyone to the lobby.
 5. A phone that locks mid-hand is auto-checked/folded after
    `--turn-timeout` seconds (default 45) so the table never stalls;
    reopening the page rejoins the same seat (the browser remembers your

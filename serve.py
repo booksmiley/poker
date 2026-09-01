@@ -101,6 +101,8 @@ def make_handler(table):
                 self._json(table.act(token, data))
             elif url.path == "/next":
                 self._json(table.start_hand(token))
+            elif url.path == "/reset":
+                self._json(table.reset_table(token))
             else:
                 self._json({"error": "not found"}, 404)
 
